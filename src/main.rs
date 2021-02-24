@@ -8,7 +8,6 @@ use rocket_contrib::json::Json;
 use corp::vault_client::VaultClient;
 use tonic::transport::channel::Channel;
 use crossbeam::channel::{bounded, Sender, Receiver};
-use async_trait::async_trait;
 
 pub mod corp{
     tonic::include_proto!("corp");
@@ -118,13 +117,3 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
         Err(e) => Err(e.to_string()),
     }
 }
-
-/*
-CHANGE
-#[async_trait]
-pub trait GRPCPassThrough<A, B>{
-    async fn withdraw(req: Json<A>, pool: State<'_, ClientPool<VaultClient<Channel>>>) -> Result<Json<B>, String>;
-}
-
-impl 
-*/
