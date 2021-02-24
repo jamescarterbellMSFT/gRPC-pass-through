@@ -120,6 +120,7 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
 }
 
 /*
+CHANGE
 #[async_trait]
 pub trait GRPCPassThrough<A, B>{
     async fn withdraw(req: Json<A>, pool: State<'_, ClientPool<VaultClient<Channel>>>) -> Result<Json<B>, String>;
