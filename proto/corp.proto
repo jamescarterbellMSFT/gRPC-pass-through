@@ -1,0 +1,31 @@
+syntax = "proto3";
+package corp;
+
+service Vault{
+	rpc Deposit(DepositRequest) returns (AccountReply) {}
+	rpc Withdraw(WithdrawRequest) returns (AccountReply) {}
+	rpc Drain(DrainRequest) returns (stream Money) {}
+}
+
+message DepositRequest{
+	string accountName = 1;
+	Money amount = 2;
+}
+
+message WithdrawRequest{
+	string accountName = 1;
+	Money amount = 2;
+}
+
+message DrainRequest{
+	string accountName = 1;
+}
+
+message AccountReply{
+	string accountName = 1;
+	Money currentTotal = 2;
+}
+
+message Money{
+	int32 amount = 1;
+}

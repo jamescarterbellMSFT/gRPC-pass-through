@@ -1,0 +1,21 @@
+[package]
+name = "grpc-pass-through"
+version = "0.1.0-dev"
+authors = ["jamesbell"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = "0.4.0"
+prost = "0.7.0"
+rocket = { git = "https://github.com/SergioBenitez/Rocket" }
+rocket_contrib = { git = "https://github.com/SergioBenitez/Rocket" }
+serde = {version = "1.0.123", features = ["derive"]}
+serde_json = "1.0.62"
+tokio = {version = "1.2.0", features = ["full"]}
+crossbeam = "0.8.0"
+async-trait = "0.1.42"
+
+[build-dependencies]
+tonic-build = "0.4.0"
