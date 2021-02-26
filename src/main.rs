@@ -39,7 +39,8 @@ pub struct ClientPool<T>{
     receiver: Receiver<T>,
 }
 
-impl<T> ClientPool<T>{
+impl<T> ClientPool<T>
+    where T: 'static + Send{
     pub fn build_n_with(n: usize, builder: fn() -> T) -> Self{
         let (sender, receiver) = bounded(n);
         
@@ -75,6 +76,15 @@ impl<T> ClientPool<T>{
         ClientGuard{
             source: self,
             client: Some(self.receiver.recv().unwrap())
+        }
+    }
+
+    pub async fn get_client_async<'a>(&'a self) -> ClientGuard<'a, T>{
+        let recv = self.receiver.clone();
+        let client = tokio::task::spawn_blocking(move || recv.recv().unwrap()).await.unwrap();
+        ClientGuard{
+            source: self,
+            client: Some(client)
         }
     }
 }
@@ -133,7 +143,7 @@ impl<C> GrpcHandlerBuilder<C>
     where C: 'static + Sync + Send{
 
     fn build_handler<F, M, R>(grpc_fn: F) -> GrpcHandler<C, M, R, F>
-        where F: 'static + Send + Sync + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + 'static>> + Copy,
+        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
             M: 'static + Sync + Send + FromData,
             R: 'static + Sync + Send + Serialize,{
         GrpcHandler{
@@ -145,7 +155,7 @@ impl<C> GrpcHandlerBuilder<C>
     }
 
     fn build_route<S, F, M, R>(method: Method, path: S, grpc_fn: F) -> Route
-        where F: 'static + Send + Sync + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + 'static>> + Copy,
+        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
             M: 'static + Sync + Send + FromData,
             R: 'static + Sync + Send + Serialize,
             S: AsRef<str>{
@@ -179,13 +189,13 @@ impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
 
 #[rocket::async_trait]
 impl<C, M, R, F> Handler for GrpcHandler<C, M, R, F>
-    where F: 'static + Send + Sync + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + 'static>> + Copy,
+    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
           M: 'static + Sync + Send + FromData,
           R: 'static + Sync + Send + Serialize,
           C: 'static + Sync + Send,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
         let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
-        let mut grpc_client = pool.get_client();
+        let mut grpc_client = pool.get_client_async().await;
         let message = M::from_data(req, data).await.unwrap();
         match (self.f)(&mut grpc_client, message).await{
             Ok(res) => Outcome::from(req, Json(res.into_inner())),

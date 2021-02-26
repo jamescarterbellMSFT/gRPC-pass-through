@@ -706,9 +706,9 @@ dependencies = [
 
 [[package]]
 name = "pear"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09f612cbd0f9dd03f5dd28a191c48e4148c3b027e41207b32eee130373c6c941"
+checksum = "3e61c26b3b7e7ef4bd0b17d2943b4620ca4682721f35a51c7fec1f5ae6325150"
 dependencies = [
  "inlinable_string",
  "pear_codegen",
@@ -717,9 +717,9 @@ dependencies = [
 
 [[package]]
 name = "pear_codegen"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "602cf1780ee9bbca663ea75769e05643e16fe87d7c8ac9f4f385a2ed8940a75c"
+checksum = "b35ff95312c89207a3770143c628d2788cf4f7dcc230b25d9623e863d5b30b84"
 dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
@@ -1535,9 +1535,9 @@ dependencies = [
 
 [[package]]
 name = "uncased"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "369fa7fd7969c5373541d3c9a40dc1b76ce676fc87aba30d87c0ad3b97fad179"
+checksum = "91c2cc0ada70bfa0898422d2e4e0d0256115f3f4a080d3d1dbcced5221dcf82b"
 dependencies = [
  "version_check",
 ]
@@ -1584,9 +1584,9 @@ checksum = "fd6fbd9a79829dd1ad0cc20627bf1ed606756a7f77edff7b66b7064f9cb327c6"
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55c0f7123de74f0dab9b7d00fd614e7b19349cd1e2f5252bbe9b1754b59433be"
+checksum = "7ee1280240b7c461d6a0071313e08f34a60b0365f14260362e5a2b17d1d31aa7"
 dependencies = [
  "cfg-if",
  "wasm-bindgen-macro",
@@ -1594,9 +1594,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-backend"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bc45447f0d4573f3d65720f636bbcc3dd6ce920ed704670118650bcd47764c7"
+checksum = "5b7d8b6942b8bb3a9b0e73fc79b98095a27de6fa247615e59d096754a3bc2aa8"
 dependencies = [
  "bumpalo",
  "lazy_static",
@@ -1609,9 +1609,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b8853882eef39593ad4174dd26fc9865a64e84026d223f63bb2c42affcbba2c"
+checksum = "e5ac38da8ef716661f0f36c0d8320b89028efe10c7c0afde65baffb496ce0d3b"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4133b5e7f2a531fa413b3a1695e925038a05a71cf67e87dafa295cb645a01385"
+checksum = "cc053ec74d454df287b9374ee8abb36ffd5acb95ba87da3ba5b7d3fe20eb401e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1632,9 +1632,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.70"
+version = "0.2.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd4945e4943ae02d15c13962b38a5b1e81eadd4b71214eee75af64a4d6a4fd64"
+checksum = "7d6f8ec44822dd71f5f221a5847fb34acd9060535c1211b70a05844c0f6383b1"
 
 [[package]]
 name = "which"
