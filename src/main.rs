@@ -14,7 +14,6 @@ pub mod corp{
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    //let f = FilterBuilder::build(warp::put(), "/deposit", VaultClient::deposit);
     let pool = ClientPool::build_n_with_async(12, || async {VaultClient::connect("127.0.0.1:8081").await.unwrap()}).await;
     let f = warp::put()
                 .and(warp::path("/deposit"))
