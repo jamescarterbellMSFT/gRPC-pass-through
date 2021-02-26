@@ -19,7 +19,7 @@ pub mod corp{
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    let route = GrpcHandlerBuilder::<VaultClient<Channel>>::build_route(Method::Put, "/deposit", |c, m| Box::pin(VaultClient::deposit(&mut c, m)));
+    let route = GrpcRoute::build_route(&Box::pin(VaultClient::<Channel>::deposit), Method::Put, "/deposit");
     rocket::ignite()
         .mount("/", routes![withdraw])
         //.mount("/", vec![(builder)])
@@ -140,12 +140,13 @@ struct GrpcHandlerBuilder<C>{
 }
 
 impl<C> GrpcHandlerBuilder<C>
-    where C: 'static + Sync + Send{
+    where C: 'static + Send{
 
-    fn build_handler<F, M, R>(grpc_fn: F) -> GrpcHandler<C, M, R, F>
-        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
-            M: 'static + Sync + Send + FromData,
-            R: 'static + Sync + Send + Serialize,{
+    fn build_handler<F, M, R, Q>(grpc_fn: F) -> GrpcHandler<C, M, R, F>
+        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
+            Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+            M: 'static + Send + FromData,
+            R: 'static + Send + Serialize,{
         GrpcHandler{
             f: Box::pin(grpc_fn),
             c: std::marker::PhantomData,
@@ -154,12 +155,13 @@ impl<C> GrpcHandlerBuilder<C>
         }
     }
 
-    fn build_route<S, F, M, R>(method: Method, path: S, grpc_fn: F) -> Route
-        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
-            M: 'static + Sync + Send + FromData,
-            R: 'static + Sync + Send + Serialize,
+    fn build_route<S, F, M, R, Q>(method: Method, path: S, grpc_fn: F) -> Route
+        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
+            Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+            M: 'static + Send + FromData,
+            R: 'static + Send + Serialize,
             S: AsRef<str>{
-        let handler = Self::build_handler::<F, M, R>(grpc_fn);
+        let handler = Self::build_handler::<F, M, R, Q>(grpc_fn);
         Route::new(method, path, handler)
     }
 }
@@ -172,6 +174,8 @@ struct GrpcHandler<C, M, R, F>
     m: std::marker::PhantomData<M>,
     r: std::marker::PhantomData<R>,
 }
+
+unsafe impl<C, M, R, F: Copy> Sync for GrpcHandler<C, M, R, F>{}
 
 impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
     where F: Copy{
@@ -188,11 +192,12 @@ impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
 
 
 #[rocket::async_trait]
-impl<C, M, R, F> Handler for GrpcHandler<C, M, R, F>
-    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Pin<Box<dyn Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send>>,
-          M: 'static + Sync + Send + FromData,
-          R: 'static + Sync + Send + Serialize,
-          C: 'static + Sync + Send,{
+impl<C, M, R, F, Q> Handler for GrpcHandler<C, M, R, F>
+    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
+          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+          M: 'static + Send + FromData,
+          R: 'static + Send + Serialize,
+          C: 'static + Send,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
         let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
         let mut grpc_client = pool.get_client_async().await;
@@ -204,5 +209,43 @@ impl<C, M, R, F> Handler for GrpcHandler<C, M, R, F>
                 "I don't know tbh"
             )),
         }
+    }
+}
+
+trait GrpcRoute<C, Q, F>
+    where C: 'static + Send,
+          F: Copy{
+
+    type Message;
+    type Response;
+
+    fn build_handler(&self) -> GrpcHandler<C, Self::Message, Self::Response, F>;
+
+    fn build_route<S>(&self, method: Method, path: S) -> Route
+        where S: AsRef<str>;
+}
+
+impl<C, M, R, Q> GrpcRoute<C, Q, fn(&mut C, M) -> Q> for Pin<Box<fn(&mut C, M) -> Q>>
+    where Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+          M: 'static + Send + FromData,
+          R: 'static + Send + Serialize,
+          C: 'static + Send{
+
+    type Message = M;
+    type Response = R;
+
+    fn build_handler(&self) -> GrpcHandler<C, Self::Message, Self::Response, fn(&mut C, M) -> Q>{
+        GrpcHandler{
+            f: self.clone(),
+            c: std::marker::PhantomData,
+            m: std::marker::PhantomData,
+            r: std::marker::PhantomData,
+        }
+    }
+
+    fn build_route<S>(&self, method: Method, path: S) -> Route
+        where S: AsRef<str>{
+        let handler = self.build_handler();
+        Route::new(method, path, handler)
     }
 }
