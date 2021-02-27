@@ -3,12 +3,12 @@
 #[macro_use] extern crate rocket;
 
 use std::future::Future;
-use rocket::{Route, Request, Data, State, handler::{Outcome, Handler}, data::{FromData}, http::Method};
+use rocket::{Route, Request, Data, State, handler::{Outcome, Handler}, data::{FromTransformedData}, http::Method};
 use rocket_contrib::json::Json;
 use corp::vault_client::VaultClient;
 use tonic::transport::channel::Channel;
 use crossbeam::channel::{bounded, Sender, Receiver};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::pin::Pin;
 
 
@@ -19,7 +19,11 @@ pub mod corp{
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    let route = GrpcRoute::build_route(&Box::pin(VaultClient::<Channel>::deposit), Method::Put, "/deposit");
+    let route = GrpcRoute::build_route(
+        &Box::pin(|c, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
+        Method::Put,
+        "/deposit"
+    );
     rocket::ignite()
         .mount("/", routes![withdraw])
         //.mount("/", vec![(builder)])
@@ -134,7 +138,7 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
     }
 }
 
-
+/*
 struct GrpcHandlerBuilder<C>{
     c: std::marker::PhantomData<C>,
 }
@@ -165,7 +169,7 @@ impl<C> GrpcHandlerBuilder<C>
         Route::new(method, path, handler)
     }
 }
-
+*/
 
 struct GrpcHandler<C, M, R, F>
     where F: Copy{
@@ -195,13 +199,13 @@ impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
 impl<C, M, R, F, Q> Handler for GrpcHandler<C, M, R, F>
     where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
           Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
-          M: 'static + Send + FromData,
+          M: 'static + Send + DeserializeOwned,
           R: 'static + Send + Serialize,
           C: 'static + Send,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
         let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
         let mut grpc_client = pool.get_client_async().await;
-        let message = M::from_data(req, data).await.unwrap();
+        let message = serde_json::from_str(&Json::<M>::transform(req, data).await.owned().unwrap().clone()).unwrap();
         match (self.f)(&mut grpc_client, message).await{
             Ok(res) => Outcome::from(req, Json(res.into_inner())),
             Err(e) => Outcome::Failure(rocket::http::Status::new(
@@ -212,29 +216,24 @@ impl<C, M, R, F, Q> Handler for GrpcHandler<C, M, R, F>
     }
 }
 
-trait GrpcRoute<C, Q, F>
+trait GrpcRoute<C, M, R, Q, F>
     where C: 'static + Send,
           F: Copy{
 
-    type Message;
-    type Response;
-
-    fn build_handler(&self) -> GrpcHandler<C, Self::Message, Self::Response, F>;
+    fn build_handler(&self) -> GrpcHandler<C, M, R, F>;
 
     fn build_route<S>(&self, method: Method, path: S) -> Route
         where S: AsRef<str>;
 }
 
-impl<C, M, R, Q> GrpcRoute<C, Q, fn(&mut C, M) -> Q> for Pin<Box<fn(&mut C, M) -> Q>>
-    where Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
-          M: 'static + Send + FromData,
+impl<F, C, M, R, Q> GrpcRoute<C, M, R, Q, F> for Pin<Box<F>>
+    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
+          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+          M: 'static + Send + DeserializeOwned,
           R: 'static + Send + Serialize,
           C: 'static + Send{
 
-    type Message = M;
-    type Response = R;
-
-    fn build_handler(&self) -> GrpcHandler<C, Self::Message, Self::Response, fn(&mut C, M) -> Q>{
+    fn build_handler(&self) -> GrpcHandler<C, M, R, F>{
         GrpcHandler{
             f: self.clone(),
             c: std::marker::PhantomData,
@@ -249,5 +248,3 @@ impl<C, M, R, Q> GrpcRoute<C, Q, fn(&mut C, M) -> Q> for Pin<Box<fn(&mut C, M) -
         Route::new(method, path, handler)
     }
 }
-
-//t
