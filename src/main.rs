@@ -8,7 +8,7 @@ use rocket_contrib::json::Json;
 use corp::vault_client::VaultClient;
 use tonic::transport::channel::Channel;
 use crossbeam::channel::{bounded, Sender, Receiver};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Serialize};
 use std::pin::Pin;
 
 
@@ -20,7 +20,7 @@ pub mod corp{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let route = GrpcRoute::build_route(
-        &Box::pin(|c: &mut VaultClient<Channel>, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
+        &Box::pin(|c: &'_ mut VaultClient<Channel>, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
         Method::Put,
         "/deposit"
     );
@@ -138,57 +138,40 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
     }
 }
 
-/*
-struct GrpcHandlerBuilder<C>{
-    c: std::marker::PhantomData<C>,
-}
-
-impl<C> GrpcHandlerBuilder<C>
-    where C: 'static + Send{
-
-    fn build_handler<F, M, R, Q>(grpc_fn: F) -> GrpcHandler<C, M, R, F>
-        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
-            Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
-            M: 'static + Send + FromData,
-            R: 'static + Send + Serialize,{
-        GrpcHandler{
-            f: Box::pin(grpc_fn),
-            c: std::marker::PhantomData,
-            m: std::marker::PhantomData,
-            r: std::marker::PhantomData,
-        }
-    }
-
-    fn build_route<S, F, M, R, Q>(method: Method, path: S, grpc_fn: F) -> Route
-        where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
-            Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
-            M: 'static + Send + FromData,
-            R: 'static + Send + Serialize,
-            S: AsRef<str>{
-        let handler = Self::build_handler::<F, M, R, Q>(grpc_fn);
-        Route::new(method, path, handler)
-    }
-}
-*/
-
-struct GrpcHandler<C, M, R, F>
-    where F: Copy{
+struct GrpcHandler< C, M, R, F, Q>
+where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+      Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
+      M: 'static + Send + DeserializeOwned,
+      R: 'static + Send + Serialize,
+      C: 'static + Send + Sync,{
     f: Pin<Box<F>>,
     c: std::marker::PhantomData<C>,
     m: std::marker::PhantomData<M>,
     r: std::marker::PhantomData<R>,
+    q: std::marker::PhantomData<Q>,
 }
 
-unsafe impl<C, M, R, F: Copy> Sync for GrpcHandler<C, M, R, F>{}
+unsafe impl< C, M, R, F, Q> Sync for GrpcHandler< C, M, R, F, Q>
+where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+      Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
+      M: 'static + Send + DeserializeOwned,
+      R: 'static + Send + Serialize,
+      C: 'static + Send + Sync,{}
 
-impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
-    where F: Copy{
+
+impl< C, M, R, F, Q> Clone for GrpcHandler< C, M, R, F, Q>
+where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+      Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
+      M: 'static + Send + DeserializeOwned,
+      R: 'static + Send + Serialize,
+      C: 'static + Send + Sync,{
 
     fn clone(&self) -> Self{
         Self{
             f: Box::pin(*self.f),
             c: std::marker::PhantomData,
             m: std::marker::PhantomData,
+            q: std::marker::PhantomData,
             r: std::marker::PhantomData
         }
     }
@@ -196,12 +179,12 @@ impl<C, M, R, F> Clone for GrpcHandler<C, M, R, F>
 
 
 #[rocket::async_trait]
-impl<C, M, R, F, Q> Handler for GrpcHandler<C, M, R, F>
-    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
-          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+impl< C, M, R, F, Q> Handler for GrpcHandler< C, M, R, F, Q>
+    where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
           M: 'static + Send + DeserializeOwned,
           R: 'static + Send + Serialize,
-          C: 'static + Send,{
+          C: 'static + Send + Sync,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
         let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
         let mut grpc_client = pool.get_client_async().await;
@@ -216,28 +199,32 @@ impl<C, M, R, F, Q> Handler for GrpcHandler<C, M, R, F>
     }
 }
 
-trait GrpcRoute<C, M, R, Q, F>
-    where C: 'static + Send,
-          F: Copy{
+trait GrpcRoute< C, M, R, Q, F>
+where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+      Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
+      M: 'static + Send + DeserializeOwned,
+      R: 'static + Send + Serialize,
+      C: 'static + Send + Sync,{
 
-    fn build_handler(&self) -> GrpcHandler<C, M, R, F>;
+    fn build_handler(&self) -> GrpcHandler< C, M, R, F, Q>;
 
     fn build_route<S>(&self, method: Method, path: S) -> Route
         where S: AsRef<str>;
 }
 
-impl<F, C, M, R, Q> GrpcRoute<C, M, R, Q, F> for Pin<Box<F>>
-    where F: 'static + Send + Sync + Copy + Fn(&mut C, M) -> Q, 
-          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Send + Sized,
+impl< F, C, M, R, Q> GrpcRoute< C, M, R, Q, F> for Pin<Box<F>>
+    where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
+          Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
           M: 'static + Send + DeserializeOwned,
           R: 'static + Send + Serialize,
-          C: 'static + Send{
+          C: 'static + Send + Sync,{
 
-    fn build_handler(&self) -> GrpcHandler<C, M, R, F>{
+    fn build_handler(&self) -> GrpcHandler< C, M, R, F, Q>{
         GrpcHandler{
             f: self.clone(),
             c: std::marker::PhantomData,
             m: std::marker::PhantomData,
+            q: std::marker::PhantomData,
             r: std::marker::PhantomData,
         }
     }
