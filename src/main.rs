@@ -20,7 +20,7 @@ pub mod corp{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let route = GrpcRoute::build_route(
-        &Box::pin(|c, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
+        &Box::pin(|c: &mut VaultClient<Channel>, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
         Method::Put,
         "/deposit"
     );
