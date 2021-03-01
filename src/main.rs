@@ -10,12 +10,11 @@ use tonic::transport::channel::Channel;
 use crossbeam::channel::{bounded, Sender, Receiver};
 use serde::{de::DeserializeOwned, Serialize};
 use std::pin::Pin;
-
+use std::sync::{Arc, Mutex};
 
 pub mod corp{
     tonic::include_proto!("corp");
 }
-
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
@@ -77,37 +76,37 @@ impl<T> ClientPool<T>
         pool
     }
 
-    pub fn get_client<'a>(&'a self) -> ClientGuard<'a, T>{
+    pub fn get_client(&self) -> ClientGuard<T>{
         ClientGuard{
-            source: self,
+            source: self.sender.clone(),
             client: Some(self.receiver.recv().unwrap())
         }
     }
 
-    pub async fn get_client_async<'a>(&'a self) -> ClientGuard<'a, T>{
+    pub async fn get_client_async(&self) -> ClientGuard<T>{
         let recv = self.receiver.clone();
         let client = tokio::task::spawn_blocking(move || recv.recv().unwrap()).await.unwrap();
         ClientGuard{
-            source: self,
+            source: self.sender.clone(),
             client: Some(client)
         }
     }
 }
 
-pub struct ClientGuard<'a, T>{
-    source: &'a ClientPool<T>,
+pub struct ClientGuard<T>{
+    source: Sender<T>,
     client: Option<T>,
 }
 
-impl<'a, T> std::ops::Drop for ClientGuard<'a, T>{
+impl<T> std::ops::Drop for ClientGuard<T>{
     fn drop(&mut self){
-        self.source.sender.send(
+        self.source.send(
             self.client.take().unwrap()
         );
     }
 }
 
-impl<'a, T> std::ops::Deref for ClientGuard<'a, T>{
+impl<T> std::ops::Deref for ClientGuard<T>{
     type Target = T;
 
     fn deref(&self) -> &Self::Target{
@@ -115,7 +114,7 @@ impl<'a, T> std::ops::Deref for ClientGuard<'a, T>{
     }
 }
 
-impl<'a, T> std::ops::DerefMut for ClientGuard<'a, T>{
+impl<T> std::ops::DerefMut for ClientGuard<T>{
     fn deref_mut(&mut self) -> &mut Self::Target{
         self.client.as_mut().unwrap()
     }
@@ -139,7 +138,7 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
     }
 }
 
-
+/*
 struct GrpcHandler< C, M, R, F, Q>
 where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
       Q: 'static + Future<Output = Result<tonic::Response<R>, tonic::Status>> + Sync + Send + Sized,
@@ -188,18 +187,17 @@ impl< C, M, R, F, Q> Handler for GrpcHandler< C, M, R, F, Q>
           R: 'static + Send + Serialize,
           C: 'static + Send + Sync,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
-        tokio::task::spawn_local(async move {
-            let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
-            let mut grpc_client = pool.get_client_async().await;
-            let message = serde_json::from_str(&Json::<M>::transform(req, data).await.owned().unwrap().clone()).unwrap();
-            match (self.f)(&mut grpc_client, message).await{
-                Ok(res) => Outcome::from(req, Json(res.into_inner())),
-                Err(e) => Outcome::Failure(rocket::http::Status::new(
-                    404,
-                    "I don't know tbh"
-                )),
-            }
-        }).await.unwrap()
+        let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
+        let local = req.guard::<State<'_, >
+        let mut grpc_client = pool.get_client_async().await;
+        let message = serde_json::from_str(&Json::<M>::transform(req, data).await.owned().unwrap().clone()).unwrap();
+        match (self.f)(&mut grpc_client, message).await{
+            Ok(res) => Outcome::from(req, Json(res.into_inner())),
+            Err(e) => Outcome::Failure(rocket::http::Status::new(
+                404,
+                "I don't know tbh"
+            )),
+        }
     }
 }
 
@@ -239,3 +237,4 @@ impl< F, C, M, R, Q> GrpcRoute< C, M, R, Q, F> for Pin<Box<F>>
         Route::new(method, path, handler)
     }
 }
+*/
