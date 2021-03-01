@@ -188,16 +188,18 @@ impl< C, M, R, F, Q> Handler for GrpcHandler< C, M, R, F, Q>
           R: 'static + Send + Serialize,
           C: 'static + Send + Sync,{
     async fn handle<'r, 's: 'r>(&'s self, req: &'r Request<'_>, data: Data) -> Outcome<'r>{
-        let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
-        let mut grpc_client = pool.get_client_async().await;
-        let message = serde_json::from_str(&Json::<M>::transform(req, data).await.owned().unwrap().clone()).unwrap();
-        match (self.f)(&mut grpc_client, message).await{
-            Ok(res) => Outcome::from(req, Json(res.into_inner())),
-            Err(e) => Outcome::Failure(rocket::http::Status::new(
-                404,
-                "I don't know tbh"
-            )),
-        }
+        tokio::task::spawn_local(async move {
+            let pool = req.guard::<State<'_, ClientPool<C>>>().await.unwrap();
+            let mut grpc_client = pool.get_client_async().await;
+            let message = serde_json::from_str(&Json::<M>::transform(req, data).await.owned().unwrap().clone()).unwrap();
+            match (self.f)(&mut grpc_client, message).await{
+                Ok(res) => Outcome::from(req, Json(res.into_inner())),
+                Err(e) => Outcome::Failure(rocket::http::Status::new(
+                    404,
+                    "I don't know tbh"
+                )),
+            }
+        }).await.unwrap()
     }
 }
 
