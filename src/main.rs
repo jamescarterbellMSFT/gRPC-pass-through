@@ -19,8 +19,9 @@ pub mod corp{
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
+    let t = &Box::pin(|c: &'_ mut VaultClient<Channel>, m: corp::DepositRequest| async {VaultClient::<Channel>::deposit(c, m).await});
     let route = GrpcRoute::build_route(
-        &Box::pin(|c: &'_ mut VaultClient<Channel>, m: corp::DepositRequest| VaultClient::<Channel>::deposit(c, m)),
+        t,
         Method::Put,
         "/deposit"
     );
@@ -137,6 +138,7 @@ async fn withdraw(req: Json<corp::WithdrawRequest>, pool: State<'_, ClientPool<V
         Err(e) => Err(e.to_string()),
     }
 }
+
 
 struct GrpcHandler< C, M, R, F, Q>
 where F: 'static + Send + Sync + Copy + Fn(& mut C, M) -> Q, 
