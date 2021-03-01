@@ -16,10 +16,12 @@ pub mod corp{
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let pool = ClientPool::build_n_with_async(12, || async {VaultClient::connect("127.0.0.1:8081").await.unwrap()}).await;
     let f = Box::new(|s: String| -> Pin<Box<dyn Future<Output = Result<warp::reply::Json, Rejection>>>> { Box::pin(async move {
-            let mut client = pool.get_client_async().await;
-            let req = serde_json::from_str::<corp::DepositRequest>(&s).unwrap();
-            let reply = &client.deposit(req).await.unwrap().into_inner();
-            Ok(warp::reply::json(reply))
+            tokio::task::spawn_blocking(|| async move{
+                let mut client = pool.get_client_async().await;
+                let req = serde_json::from_str::<corp::DepositRequest>(&s).unwrap();
+                let reply = &client.deposit(req).await.unwrap().into_inner();
+                Ok(warp::reply::json(reply))
+            }).await.unwrap().await
     })});
     let f = warp::put()
                 .and(warp::path("/deposit"))
