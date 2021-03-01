@@ -18,15 +18,8 @@ pub mod corp{
  
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    let t = &Box::pin(|c: &'_ mut VaultClient<Channel>, m: corp::DepositRequest| async {VaultClient::<Channel>::deposit(c, m).await});
-    let route = GrpcRoute::build_route(
-        t,
-        Method::Put,
-        "/deposit"
-    );
     rocket::ignite()
-        .mount("/", routes![withdraw])
-        //.mount("/", vec![(builder)])
+        .mount("/", routes![withdraw, deposit])
         .manage(
             ClientPool::build_n_with_async(
                 24, async || VaultClient::connect("https://localhost:8081").await.unwrap()
