@@ -15,14 +15,21 @@ pub mod corp{
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>  {
     let pool = ClientPool::build_n_with_async(12, || async {VaultClient::connect("127.0.0.1:8081").await.unwrap()}).await;
+    let f = Box::new(|s: String| -> Pin<Box<dyn Future<Output = Result<warp::reply::Json, Rejection>>>> { Box::pin(async move {
+            let mut client = pool.get_client_async().await;
+            let req = serde_json::from_str::<corp::DepositRequest>(&s).unwrap();
+            let reply = &client.deposit(req).await.unwrap().into_inner();
+            Ok(warp::reply::json(reply))
+    })});
     let f = warp::put()
                 .and(warp::path("/deposit"))
                 .and(warp::body::json())
-                .and_then(|q: corp::DepositRequest| async {
-                    let mut client = pool.get_client_async().await;
-                    Ok(client.deposit(q).await.unwrap())
-                });
+                .and_then(f);
     Ok(())
+}
+
+async fn test(word: String) -> Result<impl warp::Reply, std::convert::Infallible>{
+    Ok("Hi")
 }
 
 pub struct ClientPool<T>{
@@ -71,7 +78,7 @@ impl<T> ClientPool<T>
     }
 
     pub async fn get_client_async<'a>(&'a self) -> ClientGuard<'a, T>{
-        let mut recv = self.receiver.clone();
+        let recv = self.receiver.clone();
         ClientGuard{
             source: self,
             client: tokio::task::spawn_blocking(move ||{
@@ -108,15 +115,3 @@ impl<'a, T> std::ops::DerefMut for ClientGuard<'a, T>{
     }
 }
 
-/*
-struct FilterBuilder;
-
-impl FilterBuilder{
-    fn build<C, M, R>(method: impl Filter, path: impl AsRef<str>, grpc_fn: impl Fn(&mut C, M) -> Future<Output = R>) -> warp::AndThen{
-        let f = method
-            .and(warp::path(path))
-            .and_then();
-        Box::new(f)
-    }
-}
-*/
